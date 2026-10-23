@@ -111,6 +111,7 @@ class MainViewModel(
     private var bulkTestJob: Job? = null
 
     private val initialPageReady = CompletableDeferred<Unit>()
+    private var initialRefreshStarted = false
 
     // ---------- Service events ----------
     init {
@@ -321,16 +322,35 @@ class MainViewModel(
 
     // ---------- Initialization ----------
     fun initialize() {
+        // Once per main-screen ViewModel; configuration changes must not restart downloads.
+        if (initialRefreshStarted) return
+        initialRefreshStarted = true
         viewModelScope.launch(preloadDispatcher) {
             try {
                 initialPageReady.await()
                 delay(32)
                 dataSource.initAssets()
                 dataSource.syncSubscriptions()
+                // Keep the first screen responsive: all HTTP and disk work stays off-main.
+                val activeSubscriptions = dataSource.getSubscriptions().any {
+                    it.guid.isNotEmpty() && it.subscription.enabled && it.subscription.url.isNotBlank()
+                }
+                if (activeSubscriptions) {
+                    val result = dataSource.updateConfigViaSubAll()
+                    if (result.configCount > 0) {
+                        setupGroupTab(forceRefresh = true).join()
+                        refreshSelectedGuid()
+                    }
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
+                // Existing cached servers can still be measured when the network is offline.
                 LogUtil.e(AppConfig.TAG, "Main background initialization failed", error)
+            }
+            withContext(Dispatchers.Main.immediate) {
+                // Never interrupt a test explicitly started by the user.
+                if (!uiState.value.isTesting) testAllRealPing(onlyTcp = true)
             }
         }
     }
@@ -855,7 +875,7 @@ class MainViewModel(
                 }
             )
         }
-        val request = testRequests.beginBulk(groupId)
+        val request = testRequests.beginBulk(groupId, onlyTcp, serverGuids)
         val message = TestServiceMessage(
             key = AppConfig.MSG_MEASURE_CONFIG_START,
             subscriptionId = groupId,
@@ -899,9 +919,27 @@ class MainViewModel(
     }
 
     private fun onTestsFinished(requestId: String) {
-        if (testRequests.completeBulk(requestId) == null) return
+        val request = testRequests.completeBulk(requestId) ?: return
         resetTestStatus()
         viewModelScope.launch(ioDispatcher) {
+            if (request.onlyTcp) {
+                // Only consider IDs that belonged to this completed request, not old tests.
+                val stillPresent = dataSource.getServerGuidList(request.groupId).toHashSet()
+                val bestGuid = fastestTcpServer(request.testedGuids.filter { it in stillPresent }) { guid ->
+                    dataSource.decodeAffiliationInfo(guid)?.testDelayMillis
+                }
+                if (bestGuid != null) {
+                    dataSource.setSelectServer(bestGuid)
+                    _uiState.update { it.copy(selectedGuid = bestGuid) }
+                }
+                // Sorted display, including all groups when the "All" tab was tested.
+                val sortGroupIds = if (request.groupId.isEmpty()) {
+                    dataSource.getSubsList()
+                } else {
+                    listOf(request.groupId)
+                }
+                sortGroupIds.forEach(dataSource::sortByTestResultsForSub)
+            }
             cacheMutex.withLock { groupDataCache.clear() }
             reloadAllGroups(_uiState.value.groups.map { it.id })
         }

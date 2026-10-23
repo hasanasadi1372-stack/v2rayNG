@@ -1,5 +1,7 @@
 package com.v2ray.ang.ui.main
 
+import android.icu.text.RelativeDateTimeFormatter
+import android.icu.util.ULocale
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -22,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
@@ -33,6 +36,8 @@ import com.v2ray.ang.dto.entities.SubscriptionUsageInfo
 import com.v2ray.ang.extension.toTrafficString
 import com.v2ray.ang.handler.SubscriptionInfoParser
 import com.v2ray.ang.util.Utils
+import kotlin.math.ceil
+import kotlin.math.abs
 
 private const val MILLIS_PER_SECOND = 1000L
 private const val EXPIRY_DATE_PATTERN = "yyyy-MM-dd"
@@ -49,6 +54,7 @@ internal data class SubscriptionInfoUiModel(
     /** Expiry in epoch milliseconds; null when the subscription never expires. */
     val expireMillis: Long?,
     val expired: Boolean,
+    val daysUntilExpiry: Long?,
     val supportUrl: String?,
     val webPageUrl: String?,
 ) {
@@ -72,6 +78,10 @@ internal fun buildSubscriptionInfoUiModel(
         trafficFraction = if (unlimited) null else (info.used.toDouble() / info.total).toFloat().coerceIn(0f, 1f),
         expireMillis = expireMillis,
         expired = expireMillis != null && expireMillis <= nowMillis,
+        daysUntilExpiry = expireMillis?.let { expiry ->
+            val deltaDays = (expiry - nowMillis).toDouble() / 86_400_000.0
+            if (deltaDays >= 0) ceil(deltaDays).toLong() else -ceil(-deltaDays).toLong()
+        },
         supportUrl = info.supportUrl,
         webPageUrl = info.webPageUrl,
     )
@@ -170,6 +180,8 @@ private fun CardIconButton(iconRes: Int, contentDescription: String, onClick: ()
 
 @Composable
 private fun StatsRow(model: SubscriptionInfoUiModel) {
+    val configuration = LocalContext.current.resources.configuration
+    val locale = configuration.locales[0]
     val totalText = if (model.totalBytes > 0L) {
         model.totalBytes.toTrafficString()
     } else {
@@ -193,5 +205,18 @@ private fun StatsRow(model: SubscriptionInfoUiModel) {
                 maxLines = 1,
             )
         }
+    }
+    model.daysUntilExpiry?.let { days ->
+        // ICU supplies localized relative dates without adding untranslated strings.
+        val formatter = remember(locale) {
+            RelativeDateTimeFormatter.getInstance(ULocale.forLocale(locale))
+        }
+        val direction = if (days < 0) RelativeDateTimeFormatter.Direction.LAST
+            else RelativeDateTimeFormatter.Direction.NEXT
+        Text(
+            text = formatter.format(abs(days).toDouble(), direction, RelativeDateTimeFormatter.RelativeUnit.DAYS),
+            style = MaterialTheme.typography.labelSmall,
+            color = if (model.expired) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }

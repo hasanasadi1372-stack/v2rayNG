@@ -1,5 +1,11 @@
 package com.v2ray.ang.ui.main
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -8,6 +14,8 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Text
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,72 +55,96 @@ fun MainTopBar(
     val navBarHeight = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val maxMenuHeight = LocalConfiguration.current.screenHeightDp.dp - statusBarHeight - navBarHeight - 20.dp
 
-    AppTopBar(
-        title = stringResource(R.string.title_server),
-        onBackClick = {},
-        isLoading = isLoading,
-        isSearchActive = showSearch,
-        searchQuery = searchQuery,
-        onSearchQueryChange = onSearchQueryChange,
-        onSearchClose = onSearchClose,
-        searchPlaceholder = stringResource(R.string.menu_item_search),
-        navigationIcon = {
-            if (showSearch) {
-                IconButton(onClick = onSearchClose) {
-                    Icon(painterResource(R.drawable.ic_arrow_back_24dp), contentDescription = stringResource(R.string.acc_back))
+    Column {
+        AppTopBar(
+            title = stringResource(R.string.title_server),
+            onBackClick = {},
+            isLoading = isLoading,
+            isSearchActive = showSearch,
+            searchQuery = searchQuery,
+            onSearchQueryChange = onSearchQueryChange,
+            onSearchClose = onSearchClose,
+            searchPlaceholder = stringResource(R.string.menu_item_search),
+            navigationIcon = {
+                if (showSearch) {
+                    IconButton(onClick = onSearchClose) {
+                        Icon(painterResource(R.drawable.ic_arrow_back_24dp), contentDescription = stringResource(R.string.acc_back))
+                    }
+                } else {
+                    IconButton(onClick = onMenuClick) {
+                        Icon(painterResource(R.drawable.ic_menu_24dp), contentDescription = stringResource(R.string.acc_open_menu))
+                    }
                 }
-            } else {
-                IconButton(onClick = onMenuClick) {
-                    Icon(painterResource(R.drawable.ic_menu_24dp), contentDescription = stringResource(R.string.acc_open_menu))
+            },
+            actions = {
+                if (!showSearch) {
+                    IconButton(onClick = { onSearchToggle(true) }) {
+                        Icon(painterResource(R.drawable.ic_search_24dp), contentDescription = stringResource(R.string.acc_search))
+                    }
                 }
-            }
-        },
-        actions = {
-            if (!showSearch) {
-                IconButton(onClick = { onSearchToggle(true) }) {
-                    Icon(painterResource(R.drawable.ic_search_24dp), contentDescription = stringResource(R.string.acc_search))
+                Box(modifier = Modifier.wrapContentSize(Alignment.TopEnd)) {
+                    IconButton(onClick = { showImportMenu = true }) {
+                        Icon(painterResource(R.drawable.ic_add_24dp), contentDescription = stringResource(R.string.acc_add))
+                    }
+                    DropdownMenu(
+                        expanded = showImportMenu,
+                        onDismissRequest = { showImportMenu = false },
+                        scrollState = importMenuScrollState,
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        modifier = Modifier
+                            .heightIn(max = maxMenuHeight)
+                            .verticalScrollbar(importMenuScrollState)
+                    ) {
+                        ImportMenuContent(
+                            onAction = { action ->
+                                showImportMenu = false
+                                onAction(action)
+                            }
+                        )
+                    }
                 }
-            }
-            Box(modifier = Modifier.wrapContentSize(Alignment.TopEnd)) {
-                IconButton(onClick = { showImportMenu = true }) {
-                    Icon(painterResource(R.drawable.ic_add_24dp), contentDescription = stringResource(R.string.acc_add))
-                }
-                DropdownMenu(
-                    expanded = showImportMenu,
-                    onDismissRequest = { showImportMenu = false },
-                    scrollState = importMenuScrollState,
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    modifier = Modifier
-                        .heightIn(max = maxMenuHeight)
-                        .verticalScrollbar(importMenuScrollState)
-                ) {
-                    ImportMenuContent(
-                        onAction = { action ->
-                            showImportMenu = false
-                            onAction(action)
+                Box(modifier = Modifier.wrapContentSize(Alignment.TopEnd)) {
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(painterResource(R.drawable.ic_more_vert_24dp), contentDescription = stringResource(R.string.acc_more))
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false },
+                        scrollState = moreMenuScrollState,
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        modifier = Modifier
+                            .heightIn(max = maxMenuHeight)
+                            .verticalScrollbar(moreMenuScrollState)
+                    ) {
+                        MoreMenuContent { action ->
+                            showMenu = false
+                            onMoreMenuAction(action)
                         }
-                    )
-                }
-            }
-            Box(modifier = Modifier.wrapContentSize(Alignment.TopEnd)) {
-                IconButton(onClick = { showMenu = true }) {
-                    Icon(painterResource(R.drawable.ic_more_vert_24dp), contentDescription = stringResource(R.string.acc_more))
-                }
-                DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false },
-                    scrollState = moreMenuScrollState,
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    modifier = Modifier
-                        .heightIn(max = maxMenuHeight)
-                        .verticalScrollbar(moreMenuScrollState)
-                ) {
-                    MoreMenuContent { action ->
-                        showMenu = false
-                        onMoreMenuAction(action)
                     }
                 }
             }
-        }
-    )
+        )
+    // Keep the three manual actions visible instead of burying them in the More menu.
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        AssistChip(
+            onClick = { onAction(MainAction.UpdateSubscriptions) },
+            enabled = !isLoading,
+            label = { Text(stringResource(R.string.title_sub_update)) },
+        )
+        AssistChip(
+            onClick = { onAction(MainAction.TestAllServers) },
+            enabled = !isLoading,
+            label = { Text(stringResource(R.string.title_ping_all_server)) },
+        )
+        AssistChip(
+            onClick = { onAction(MainAction.SortByTestResults) },
+            enabled = !isLoading,
+            label = { Text(stringResource(R.string.title_sort_by_test_results)) },
+        )
+    }
+    }
 }
