@@ -1,0 +1,95 @@
+
+name: Build Debug APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          log-accepted-android-sdk-licenses: false
+          cmdline-tools-version: '14742923'
+          packages: 'platforms;android-37.0 build-tools;37.0.0 platform-tools'
+
+      - name: Install NDK
+        run: |
+          echo "y" | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            --channel=0 \
+            --install "ndk;30.0.16248370"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370" >> "$GITHUB_ENV"
+          sed -i '10i\
+            ndkVersion = "30.0.16248370"' "$GITHUB_WORKSPACE/V2rayNG/app/build.gradle.kts"
+
+      - name: Build HEV tun library
+        run: bash compile-hevtun.sh
+
+      - name: Copy HEV libraries
+        run: |
+          mkdir -p V2rayNG/app/libs
+          cp -r libs/. V2rayNG/app/libs/
+
+      - name: Get AndroidLibXrayLite tag
+        run: |
+          CURRENT_TAG="$(git -C AndroidLibXrayLite describe --tags --abbrev=0)"
+          echo "CURRENT_TAG=$CURRENT_TAG" >> "$GITHUB_ENV"
+
+      - name: Download libv2ray
+        uses: robinraju/release-downloader@v1.13
+        with:
+          repository: '2dust/AndroidLibXrayLite'
+          tag: ${{ env.CURRENT_TAG }}
+          fileName: 'libv2ray.aar'
+          out-file-path: 'V2rayNG/app/libs/'
+
+      - name: Setup Java
+        uses: actions/setup-java@v6.0.1
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Use separate package ID for test build
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("V2rayNG/app/build.gradle.kts")
+          s = p.read_text()
+          marker = "buildTypes {\n"
+          if marker not in s:
+              raise SystemExit("Could not find buildTypes block")
+          if 'applicationIdSuffix = ".debug"' not in s:
+              s = s.replace(
+                  marker,
+                  marker + '    debug {\n        applicationIdSuffix = ".debug"\n    }\n',
+                  1,
+              )
+          p.write_text(s)
+          PY
+
+      - name: Build APK
+        run: |
+          cd V2rayNG
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          chmod 755 gradlew
+          ./gradlew :app:assemblePlaystoreDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v7
+        if: success()
+        with:
+          name: v2rayng-debug-apk
+          path: V2rayNG/app/build/outputs/apk/playstore/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
