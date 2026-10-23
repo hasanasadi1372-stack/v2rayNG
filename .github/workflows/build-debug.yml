@@ -69,13 +69,34 @@ jobs:
           marker = "buildTypes {\n"
           if marker not in s:
               raise SystemExit("Could not find buildTypes block")
-          if 'applicationIdSuffix = ".debug"' not in s:
+          if 'applicationIdSuffix = ".auto"' not in s:
               s = s.replace(
                   marker,
-                  marker + '    debug {\n        applicationIdSuffix = ".debug"\n    }\n',
+                  marker + '    debug {\n        applicationIdSuffix = ".auto"\n    }\n',
                   1,
               )
           p.write_text(s)
+          PY
+
+      - name: Verify custom features and mark AUTO build
+        run: |
+          grep -Fq 'AssistChip(' V2rayNG/app/src/main/java/com/v2ray/ang/ui/main/MainTopBar.kt
+          grep -Fq 'MainAction.TestAllServers' V2rayNG/app/src/main/java/com/v2ray/ang/ui/main/MainTopBar.kt
+          grep -Fq 'initialRefreshStarted' V2rayNG/app/src/main/java/com/v2ray/ang/ui/main/MainViewModel.kt
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('V2rayNG/app/src/main/res/values/strings.xml')
+          content = p.read_text(encoding='utf-8')
+          old = '<string name="app_name" translatable="false">v2rayNG</string>'
+          if old not in content:
+              raise SystemExit('Could not find original app label in strings.xml')
+          p.write_text(content.replace(old, '<string name="app_name" translatable="false">v2rayNG AUTO</string>', 1), encoding='utf-8')
+          p = Path('V2rayNG/app/build.gradle.kts')
+          content = p.read_text(encoding='utf-8')
+          old = 'versionName = "2.3.13"'
+          if old not in content:
+              raise SystemExit('Could not locate app versionName')
+          p.write_text(content.replace(old, 'versionName = "2.3.13-AUTO"', 1), encoding='utf-8')
           PY
 
       - name: Build APK
@@ -89,7 +110,7 @@ jobs:
         uses: actions/upload-artifact@v7
         if: success()
         with:
-          name: v2rayng-debug-apk
+          name: v2rayng-AUTO-debug-apk
           path: V2rayNG/app/build/outputs/apk/playstore/debug/*.apk
           if-no-files-found: error
           retention-days: 7
