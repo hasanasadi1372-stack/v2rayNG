@@ -50,6 +50,17 @@ class MainTestRequestsTest {
     }
 
     @Test
+    fun bulkRequestRetainsOnlyItsOwnTestTypeAndServerIds() {
+        val requests = MainTestRequests()
+        val ids = mutableListOf("a", "b")
+        val bulk = requests.beginBulk("group", onlyTcp = true, testedGuids = ids)
+        ids.add("c")
+        assertTrue(bulk.onlyTcp)
+        assertEquals(listOf("a", "b"), bulk.testedGuids)
+        assertEquals("group", requests.completeBulk(bulk.id)?.groupId)
+    }
+
+    @Test
     fun currentResultDoesNotFinishAnIndependentBulkTest() {
         val requests = MainTestRequests()
         val bulk = requests.beginBulk("") // All servers is a valid group ID.

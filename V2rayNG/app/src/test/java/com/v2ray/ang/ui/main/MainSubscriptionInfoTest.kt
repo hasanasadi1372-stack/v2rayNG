@@ -38,6 +38,7 @@ class MainSubscriptionInfoTest {
         val future = buildSubscriptionInfoUiModel(SubscriptionUsageInfo(expire = now / 1000 + 60), now)
         assertEquals(now + 60_000, future.expireMillis)
         assertFalse(future.expired)
+        assertEquals(1L, future.daysUntilExpiry)
         assertTrue(buildSubscriptionInfoUiModel(SubscriptionUsageInfo(expire = now / 1000 - 1), now).expired)
     }
 
@@ -45,6 +46,7 @@ class MainSubscriptionInfoTest {
     fun zeroExpireMeansNeverExpires() {
         val model = buildSubscriptionInfoUiModel(SubscriptionUsageInfo(expire = 0), now)
         assertNull(model.expireMillis)
+        assertNull(model.daysUntilExpiry)
         assertFalse(model.expired)
     }
 }
