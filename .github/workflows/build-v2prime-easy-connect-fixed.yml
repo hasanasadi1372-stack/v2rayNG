@@ -5171,7 +5171,11 @@ jobs:
               path.write_text(code, encoding='utf-8')
               print('Registered EasyConnect as Activity-handled action')
           FIX_EASY_CONNECT_HANDLER
-
+      - name: Fix first-time subscription and selected-server deletion
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/workflows/fix_v2prime_first_import_delete.py
       - name: Build APK
         run: |
           cd V2rayNG
