@@ -5176,6 +5176,12 @@ jobs:
         run: |
           set -euo pipefail
           python3 .github/workflows/fix_v2prime_first_import_delete.py
+                - name: Set independent V2Prime install identifier
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i 's/applicationIdSuffix = ".v2primeeasy"/applicationIdSuffix = ".v2primeeasyfix2026"/' V2rayNG/app/build.gradle.kts
+          grep -Fq 'applicationIdSuffix = ".v2primeeasyfix2026"' V2rayNG/app/build.gradle.kts
       - name: Build APK
         run: |
           cd V2rayNG
